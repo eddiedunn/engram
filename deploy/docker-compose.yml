@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: engram-db
+    environment:
+      POSTGRES_USER: engram
+      POSTGRES_PASSWORD: engram
+      POSTGRES_DB: engram
+    ports:
+      - "5432:5432"
+    volumes:
+      - engram_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U engram"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  engram:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    container_name: engram-server
+    environment:
+      ENGRAM_DATABASE_URL: postgresql+asyncpg://engram:engram@db:5432/engram
+      ENGRAM_API_HOST: 0.0.0.0
+      ENGRAM_API_PORT: 8800
+      ENGRAM_LOG_FORMAT: json
+    ports:
+      - "8800:8800"
+    depends_on:
+      db:
+        condition: service_healthy
+    # For GPU support, uncomment:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+volumes:
+  engram_data:
