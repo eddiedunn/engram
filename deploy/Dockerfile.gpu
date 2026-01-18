@@ -1,0 +1,50 @@
+# GPU-enabled Dockerfile for Engram
+# Uses NVIDIA PyTorch base image for CUDA support with sentence-transformers
+
+FROM nvcr.io/nvidia/pytorch:25.12-py3
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install uv for fast dependency installation
+RUN pip install uv
+
+# Copy project files
+COPY pyproject.toml README.md ./
+COPY src/ src/
+
+# Install dependencies (PyTorch already in base image, so skip torch install)
+RUN uv pip install --system --break-system-packages -e . --no-deps && \
+    uv pip install --system --break-system-packages \
+    "fastapi>=0.115.0" \
+    "uvicorn[standard]>=0.32.0" \
+    "pydantic>=2.10.0" \
+    "pydantic-settings>=2.6.0" \
+    "asyncpg>=0.30.0" \
+    "pgvector>=0.3.6" \
+    "sqlalchemy[asyncio]>=2.0.36" \
+    "sentence-transformers>=3.3.0" \
+    "numpy>=1.26.0" \
+    "httpx>=0.28.0" \
+    "structlog>=24.4.0" \
+    "alembic>=1.14.0"
+
+# Create data directories
+RUN mkdir -p /app/data /app/models
+
+# Environment for GPU
+ENV NVIDIA_VISIBLE_DEVICES=all
+ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=5 \
+    CMD curl -sf http://localhost:8800/health || exit 1
+
+# Run as root for now (model downloads need write access)
+# TODO: Fix permissions for non-root user
+EXPOSE 8800
+CMD ["python", "-m", "engram.cli"]
