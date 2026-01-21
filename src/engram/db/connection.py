@@ -69,9 +69,12 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
     session = get_session_factory()()
     try:
         yield session
-        await session.commit()
+        # Only commit if there are pending changes and not already committed
+        if session.in_transaction():
+            await session.commit()
     except Exception:
-        await session.rollback()
+        if session.in_transaction():
+            await session.rollback()
         raise
     finally:
         await session.close()

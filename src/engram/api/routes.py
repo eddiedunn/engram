@@ -1,6 +1,6 @@
 """API routes for content management and search."""
 
-from typing import Annotated
+from typing import Annotated, AsyncGenerator
 from uuid import UUID
 
 import structlog
@@ -16,7 +16,7 @@ logger = structlog.get_logger()
 router = APIRouter(tags=["content"])
 
 
-async def get_repository() -> ContentRepository:
+async def get_repository() -> AsyncGenerator[ContentRepository, None]:
     """Dependency to get repository with database session."""
     async with get_db() as session:
         yield ContentRepository(session)

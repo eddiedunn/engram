@@ -1,7 +1,7 @@
-"""Embedding generation service using sentence-transformers."""
+"""Embedding service client wrapper."""
 
+import httpx
 import structlog
-from sentence_transformers import SentenceTransformer
 
 from engram.config import get_settings
 
@@ -9,70 +9,59 @@ logger = structlog.get_logger()
 
 
 class Embedder:
-    """Generates embeddings using sentence-transformers models."""
+    """Generates embeddings via Embed service."""
 
     _instance: "Embedder | None" = None
-    _model: SentenceTransformer | None = None
 
     def __new__(cls) -> "Embedder":
-        """Singleton pattern for model reuse."""
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
 
     def __init__(self) -> None:
-        """Initialize embedder (model loaded lazily)."""
         self.settings = get_settings()
-        self.model_name = self.settings.embedding_model
-        self.batch_size = self.settings.embedding_batch_size
+        self._client = httpx.Client(
+            base_url=self.settings.embed_service_url,
+            timeout=self.settings.embed_timeout,
+        )
+        self._available = True
 
-    @property
-    def model(self) -> SentenceTransformer:
-        """Lazy load the embedding model."""
-        if self._model is None:
-            logger.info("Loading embedding model", model=self.model_name)
-            self._model = SentenceTransformer(self.model_name)
-            logger.info(
-                "Model loaded",
-                model=self.model_name,
-                dimensions=self._model.get_sentence_embedding_dimension(),
-            )
-        return self._model
+    def embed(self, text: str) -> list[float] | None:
+        """Generate embedding for a single text."""
+        result = self.embed_batch([text])
+        return result[0] if result else None
 
-    def embed(self, text: str) -> list[float]:
-        """Generate embedding for a single text.
-
-        Args:
-            text: Text to embed
-
-        Returns:
-            Embedding vector as list of floats
-        """
-        embedding = self.model.encode(text, convert_to_numpy=True)
-        return embedding.tolist()
-
-    def embed_batch(self, texts: list[str]) -> list[list[float]]:
+    def embed_batch(self, texts: list[str]) -> list[list[float]] | None:
         """Generate embeddings for multiple texts.
 
-        Args:
-            texts: List of texts to embed
-
-        Returns:
-            List of embedding vectors
+        Returns None if service unavailable (graceful degradation).
         """
         if not texts:
             return []
 
-        logger.debug("Embedding batch", count=len(texts), batch_size=self.batch_size)
-        embeddings = self.model.encode(
-            texts,
-            batch_size=self.batch_size,
-            convert_to_numpy=True,
-            show_progress_bar=len(texts) > self.batch_size,
-        )
-        return [e.tolist() for e in embeddings]
+        if not self._available or not self.settings.embed_enabled:
+            return None
+
+        try:
+            response = self._client.post("/v1/embed", json={"texts": texts})
+            response.raise_for_status()
+            return response.json()["embeddings"]
+        except Exception as e:
+            logger.warning("Embed service unavailable", error=str(e))
+            self._available = False
+            return None
+
+    def check_health(self) -> bool:
+        """Check if embed service is healthy."""
+        try:
+            response = self._client.get("/health")
+            self._available = response.status_code == 200
+            return self._available
+        except Exception:
+            self._available = False
+            return False
 
     @property
     def dimensions(self) -> int:
-        """Get embedding dimensions from loaded model."""
-        return self.model.get_sentence_embedding_dimension()
+        """Get embedding dimensions (fixed for bge-m3)."""
+        return 1024

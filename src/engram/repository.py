@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 from uuid import UUID
 
 import structlog
-from sqlalchemy import delete, select, text
+from pgvector.sqlalchemy import Vector
+from sqlalchemy import delete, select, text, cast, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from engram.db.tables import ChunkTable, ContentTable
@@ -69,22 +71,46 @@ class ContentRepository:
         # Chunk and embed
         chunks = self.chunker.chunk(content.text)
         chunk_texts = [c.text for c in chunks]
-        embeddings = self.embedder.embed_batch(chunk_texts)
+        # Run embedding in thread pool to avoid blocking async event loop
+        embeddings = await asyncio.to_thread(self.embedder.embed_batch, chunk_texts)
 
-        # Store chunks
-        for chunk, embedding in zip(chunks, embeddings):
-            chunk_row = ChunkTable(
-                content_id=content_row.id,
-                chunk_index=chunk.index,
-                text=chunk.text,
-                start_char=chunk.start_char,
-                end_char=chunk.end_char,
-                embedding=embedding,
+        # Handle embedding service unavailability
+        if embeddings is None:
+            logger.warning(
+                "Embed service unavailable, storing content without embeddings",
+                content_id=content.content_id,
             )
-            self.session.add(chunk_row)
+            # Store chunks with None embeddings (pending status)
+            for chunk in chunks:
+                chunk_row = ChunkTable(
+                    content_id=content_row.id,
+                    chunk_index=chunk.index,
+                    text=chunk.text,
+                    start_char=chunk.start_char,
+                    end_char=chunk.end_char,
+                    embedding=None,
+                    embedding_status='pending',
+                )
+                self.session.add(chunk_row)
+        else:
+            # Store chunks with embeddings
+            for chunk, embedding in zip(chunks, embeddings):
+                chunk_row = ChunkTable(
+                    content_id=content_row.id,
+                    chunk_index=chunk.index,
+                    text=chunk.text,
+                    start_char=chunk.start_char,
+                    end_char=chunk.end_char,
+                    embedding=embedding,
+                    embedding_status='complete',
+                )
+                self.session.add(chunk_row)
 
         content_row.chunk_count = len(chunks)
-        await self.session.flush()
+        await self.session.commit()  # Explicit commit to ensure pgvector operations complete
+
+        # Refresh to avoid lazy loading issues
+        await self.session.refresh(content_row)
 
         logger.info(
             "Content stored",
@@ -117,18 +143,39 @@ class ContentRepository:
         # Re-chunk and embed
         chunks = self.chunker.chunk(content.text)
         chunk_texts = [c.text for c in chunks]
-        embeddings = self.embedder.embed_batch(chunk_texts)
+        # Run embedding in thread pool to avoid blocking async event loop
+        embeddings = await asyncio.to_thread(self.embedder.embed_batch, chunk_texts)
 
-        for chunk, embedding in zip(chunks, embeddings):
-            chunk_row = ChunkTable(
-                content_id=id,
-                chunk_index=chunk.index,
-                text=chunk.text,
-                start_char=chunk.start_char,
-                end_char=chunk.end_char,
-                embedding=embedding,
+        # Handle embedding service unavailability
+        if embeddings is None:
+            logger.warning(
+                "Embed service unavailable, updating content without embeddings",
+                content_id=content.content_id,
             )
-            self.session.add(chunk_row)
+            # Store chunks with None embeddings
+            for chunk in chunks:
+                chunk_row = ChunkTable(
+                    content_id=id,
+                    chunk_index=chunk.index,
+                    text=chunk.text,
+                    start_char=chunk.start_char,
+                    end_char=chunk.end_char,
+                    embedding=None,
+                    embedding_status='pending',
+                )
+                self.session.add(chunk_row)
+        else:
+            for chunk, embedding in zip(chunks, embeddings):
+                chunk_row = ChunkTable(
+                    content_id=id,
+                    chunk_index=chunk.index,
+                    text=chunk.text,
+                    start_char=chunk.start_char,
+                    end_char=chunk.end_char,
+                    embedding=embedding,
+                    embedding_status='complete',
+                )
+                self.session.add(chunk_row)
 
         content_row.chunk_count = len(chunks)
         return self._to_model(content_row)
@@ -177,6 +224,47 @@ class ContentRepository:
         result = await self.session.execute(query)
         return [self._to_model(row) for row in result.scalars()]
 
+    async def get_chunks_by_status(
+        self, status: str, limit: int = 50
+    ) -> list[ChunkTable]:
+        """Get chunks by embedding status.
+
+        Args:
+            status: Embedding status ('pending', 'complete', 'failed')
+            limit: Maximum number of chunks to return
+
+        Returns:
+            List of chunk rows matching the status
+        """
+        result = await self.session.execute(
+            select(ChunkTable)
+            .where(ChunkTable.embedding_status == status)
+            .limit(limit)
+        )
+        return list(result.scalars().all())
+
+
+    async def update_chunk_embedding(
+        self, chunk_id: UUID, embedding: list[float]
+    ) -> None:
+        """Update chunk with generated embedding.
+
+        Args:
+            chunk_id: UUID of the chunk to update
+            embedding: Generated embedding vector
+
+        Used by backfill script to populate pending embeddings.
+        """
+        await self.session.execute(
+            update(ChunkTable)
+            .where(ChunkTable.id == chunk_id)
+            .values(
+                embedding=embedding,
+                embedding_status='complete'
+            )
+        )
+        await self.session.commit()
+
     async def search_semantic(
         self,
         query: str,
@@ -198,10 +286,18 @@ class ContentRepository:
             List of search results ordered by relevance
         """
         # Generate query embedding
-        query_embedding = self.embedder.embed(query)
+        # Run embedding in thread pool to avoid blocking async event loop
+        query_embedding = await asyncio.to_thread(self.embedder.embed, query)
+
+        # If embedding service unavailable, return empty results
+        if query_embedding is None:
+            logger.warning("Embed service unavailable for search", query=query)
+            return []
 
         # Build the query with pgvector cosine distance
         # Note: pgvector uses distance, so we convert to similarity (1 - distance)
+        from sqlalchemy import bindparam
+
         sql = """
             SELECT
                 c.id as content_id,
@@ -218,13 +314,13 @@ class ContentRepository:
                 c.updated_at,
                 ch.text as chunk_text,
                 ch.chunk_index,
-                1 - (ch.embedding <=> :embedding::vector) as score
+                1 - (ch.embedding <=> :embedding) as score
             FROM chunks ch
             JOIN content c ON ch.content_id = c.id
             WHERE ch.embedding IS NOT NULL
         """
 
-        params: dict = {"embedding": str(query_embedding)}
+        params: dict = {"embedding": query_embedding}
 
         if content_type:
             sql += " AND c.content_type = :content_type"
@@ -235,13 +331,15 @@ class ContentRepository:
             params["tags"] = tags
 
         if threshold > 0:
-            sql += " AND (1 - (ch.embedding <=> :embedding::vector)) >= :threshold"
+            sql += " AND (1 - (ch.embedding <=> :embedding)) >= :threshold"
             params["threshold"] = threshold
 
-        sql += " ORDER BY ch.embedding <=> :embedding::vector LIMIT :limit"
+        sql += " ORDER BY ch.embedding <=> :embedding LIMIT :limit"
         params["limit"] = top_k
 
-        result = await self.session.execute(text(sql), params)
+        # Use bindparam with Vector type for proper parameter binding with asyncpg
+        stmt = text(sql).bindparams(bindparam("embedding", type_=Vector(len(query_embedding))))
+        result = await self.session.execute(stmt, params)
         rows = result.mappings().all()
 
         return [

@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from engram.api.routes import router
 from engram.config import get_settings
 from engram.db.connection import close_db, init_db
+from engram.embedding import Embedder
 
 logger = structlog.get_logger()
 
@@ -57,6 +58,17 @@ def create_app() -> FastAPI:
     @app.get("/health")
     async def health() -> dict:
         """Health check endpoint."""
-        return {"status": "healthy", "version": "0.1.0"}
+        embedder = Embedder()
+        embed_healthy = embedder.check_health()
+
+        overall_status = "healthy" if embed_healthy else "degraded"
+
+        return {
+            "status": overall_status,
+            "version": "0.1.0",
+            "services": {
+                "embed": "healthy" if embed_healthy else "unavailable"
+            }
+        }
 
     return app

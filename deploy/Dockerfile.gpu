@@ -10,16 +10,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install uv for fast dependency installation
-RUN pip install uv
+# Install uv for fast dependency installation (using official image)
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 # Copy project files
 COPY pyproject.toml README.md ./
 COPY src/ src/
 
 # Install dependencies (PyTorch already in base image, so skip torch install)
-RUN uv pip install --system --break-system-packages -e . --no-deps && \
-    uv pip install --system --break-system-packages \
+RUN uv pip install --python /usr/bin/python3 --break-system-packages -e . --no-deps && \
+    uv pip install --python /usr/bin/python3 --break-system-packages \
     "fastapi>=0.115.0" \
     "uvicorn[standard]>=0.32.0" \
     "pydantic>=2.10.0" \

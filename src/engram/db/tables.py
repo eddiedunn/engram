@@ -87,6 +87,9 @@ class ChunkTable(Base):
     embedding: Mapped[list[float] | None] = mapped_column(
         Vector(get_settings().embedding_dimensions), nullable=True
     )
+    embedding_status: Mapped[str] = mapped_column(
+        String(20), server_default='complete', nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

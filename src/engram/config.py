@@ -23,10 +23,12 @@ class Settings(BaseSettings):
     db_pool_size: int = 5
     db_max_overflow: int = 10
 
-    # Embedding model
-    embedding_model: str = "BAAI/bge-large-en-v1.5"
-    embedding_dimensions: int = 1024
-    embedding_batch_size: int = 32
+    # Embed service configuration
+    embed_service_url: str = "http://localhost:8710"
+    embed_timeout: float = 60.0
+    embed_batch_size: int = 50
+    embed_enabled: bool = True  # Can disable for testing
+    embedding_dimensions: int = 1024  # bge-m3 dimensions
 
     # API
     api_host: str = "0.0.0.0"
