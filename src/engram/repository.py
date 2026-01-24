@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime
 from uuid import UUID
 
 import structlog
@@ -54,6 +55,19 @@ class ContentRepository:
 
         logger.info("Storing new content", content_id=content.content_id, type=content.content_type)
 
+        # Extract published date for created_at (use YouTube publish date if available)
+        if content.metadata and 'published_at' in content.metadata:
+            # Parse ISO format or use as-is if already datetime
+            pub_date = content.metadata['published_at']
+            if isinstance(pub_date, str):
+                created_at = datetime.fromisoformat(pub_date.replace('Z', '+00:00'))
+            else:
+                created_at = pub_date
+        else:
+            # Fallback to current time if no publish date
+            from datetime import timezone
+            created_at = datetime.now(timezone.utc)
+
         # Create content record
         content_row = ContentTable(
             content_id=content.content_id,
@@ -64,6 +78,7 @@ class ContentRepository:
             summary=content.summary,
             metadata_=content.metadata,
             tags=content.tags,
+            created_at=created_at,
         )
         self.session.add(content_row)
         await self.session.flush()  # Get the ID
@@ -111,6 +126,9 @@ class ContentRepository:
 
         # Refresh to avoid lazy loading issues
         await self.session.refresh(content_row)
+
+        # Force load all attributes to avoid greenlet errors in _to_model
+        _ = (content_row.id, content_row.created_at, content_row.updated_at)
 
         logger.info(
             "Content stored",
