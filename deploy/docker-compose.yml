@@ -6,7 +6,7 @@ services:
     container_name: engram-db
     environment:
       POSTGRES_USER: engram
-      POSTGRES_PASSWORD: engram
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-engram}
       POSTGRES_DB: engram
     ports:
       - "5432:5432"
@@ -24,7 +24,7 @@ services:
       dockerfile: deploy/Dockerfile
     container_name: engram-server
     environment:
-      ENGRAM_DATABASE_URL: postgresql+asyncpg://engram:engram@db:5432/engram
+      ENGRAM_DATABASE_URL: postgresql+asyncpg://engram:${POSTGRES_PASSWORD:-engram}@db:5432/engram
       ENGRAM_API_HOST: 0.0.0.0
       ENGRAM_API_PORT: 8800
       ENGRAM_LOG_FORMAT: json

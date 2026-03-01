@@ -6,21 +6,21 @@ This guide covers deploying Engram to GPU-enabled infrastructure using Ansible w
 
 ### Infrastructure
 - GPU server with NVIDIA GPU and drivers installed
-- Tailscale mesh network configured
-- Step CA instance for TLS certificates
+- Tailscale or equivalent mesh network configured (optional, for remote access)
+- ACME-compatible CA for TLS certificates (e.g., Let's Encrypt or step-ca)
 - Ansible control node with access to target server
 
 ### Required Components
 - NVIDIA Container Toolkit installed on host
 - CDI (Container Device Interface) configured
 - Podman with systemd integration (Quadlet)
-- Caddy reverse proxy (deployed via `caddy_gpu_dev` role)
+- Caddy reverse proxy (deployed via your Caddy role)
 
 ## Deployment Steps
 
 ### 1. Configure Secrets
 
-Store credentials securely in gopass:
+Store credentials securely (e.g., using gopass, vault, or environment variables):
 
 ```bash
 # Database password
@@ -32,7 +32,7 @@ gopass insert engram/api-key
 
 ### 2. Configure Group Variables
 
-In `your-infra/group_vars/engram_vps.yml`:
+In your inventory group_vars file (e.g., `group_vars/engram_servers.yml`):
 
 ```yaml
 engram_db_password: "{{ lookup('community.general.gopass', 'engram/db-password') }}"
@@ -46,14 +46,14 @@ engram_gpu_enabled: true
 
 ### 3. Deploy Infrastructure
 
-From `your-infra` directory:
+From your ansible directory:
 
 ```bash
 # Deploy Engram service
 ansible-playbook -i inventory/hosts.yml playbooks/deploy-engram.yml
 
 # Deploy Caddy reverse proxy
-ansible-playbook -i inventory/hosts.yml playbooks/deploy-caddy-gpu.yml
+ansible-playbook -i inventory/hosts.yml playbooks/deploy-caddy.yml
 ```
 
 ### 4. Verify Deployment
@@ -64,7 +64,7 @@ Check service status:
 # On target server
 systemctl --user status engram-app.service
 systemctl --user status engram-db.service
-systemctl --user status caddy-gpu.service
+systemctl --user status caddy.service
 
 # Check logs
 journalctl --user -u engram-app.service -f
@@ -76,7 +76,7 @@ Test endpoint:
 # Health check (direct)
 curl http://localhost:8800/health
 
-# Via Caddy (requires valid cert)
+# Via Caddy reverse proxy
 curl https://engram.your-domain.example.com/health
 ```
 
@@ -97,7 +97,7 @@ engram.your-domain.example.com {
 ### Certificate Renewal
 
 Caddy automatically:
-1. Obtains certificates from Step CA via ACME
+1. Obtains certificates from your CA via ACME
 2. Renews certificates before expiration
 3. Reloads configuration without downtime
 
@@ -106,10 +106,8 @@ No manual intervention required for certificate lifecycle.
 ## Container Architecture
 
 ### Network Setup
-- Internal network: `10.x.x.0/24`
-- Database IP: `10.x.x.10`
-- App IP: `10.x.x.11`
-- External access: Caddy on host network
+- Database and app communicate via an internal Docker/Podman network
+- External access via Caddy reverse proxy on host network
 
 ### GPU Passthrough
 - Uses CDI for NVIDIA GPU access
@@ -147,14 +145,14 @@ podman exec engram-db psql -U engram -c '\l'
 
 ### Certificate Errors
 
-Check Step CA connectivity:
+Check CA connectivity:
 ```bash
 curl -k https://your-ca.example.com:9000/health
 ```
 
 View Caddy logs:
 ```bash
-journalctl --user -u caddy-gpu.service -f
+journalctl --user -u caddy.service -f
 ```
 
 ### Service Won't Start
@@ -210,20 +208,18 @@ journalctl --user -u engram-app.service -f
 journalctl --user -u engram-db.service -f
 
 # Caddy logs
-journalctl --user -u caddy-gpu.service -f
+journalctl --user -u caddy.service -f
 ```
 
 ### Resource Usage
 ```bash
-podman stats engram-app engram-db caddy-gpu
+podman stats engram-app engram-db
 nvidia-smi  # GPU utilization
 ```
 
 ## Configuration Reference
 
-See `your-infra/roles/engram_dev/defaults/main.yml` for all available configuration options.
-
-Key settings:
+Key settings (configurable via environment variables):
 - `engram_embedding_model`: HuggingFace model name
 - `engram_gpu_enabled`: Enable/disable GPU passthrough
 - `engram_port`: Application port (default: 8800)
