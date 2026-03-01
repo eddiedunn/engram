@@ -37,7 +37,7 @@ Internet/Tailscale → Caddy (TLS termination) → Engram (port 8800) → Postgr
 ### Certificate Management
 
 TLS certificates are automatically managed via:
-- **Step CA**: Internal ACME server at `your-ca.example.com`
+- **Step CA**: Internal ACME server at `your-ca.example.com:9000`
 - **Auto-renewal**: Caddy handles certificate lifecycle
 - **Zero-trust**: Mesh-only access via Tailscale
 
