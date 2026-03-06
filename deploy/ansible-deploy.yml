@@ -115,23 +115,24 @@
       notify: Reload and restart services
 
   handlers:
-    - name: Reload and restart services
-      block:
-        - name: Reload systemd daemon
-          ansible.builtin.systemd:
-            daemon_reload: true
-          become: true
+    - name: Reload systemd daemon
+      ansible.builtin.systemd:
+        daemon_reload: true
+      become: true
+      listen: Reload and restart services
 
-        - name: Restart engram-db service
-          ansible.builtin.systemd:
-            name: engram-db
-            state: restarted
-            enabled: true
-          become: true
+    - name: Restart engram-db service
+      ansible.builtin.systemd:
+        name: engram-db
+        state: restarted
+        enabled: true
+      become: true
+      listen: Reload and restart services
 
-        - name: Restart engram service
-          ansible.builtin.systemd:
-            name: engram
-            state: restarted
-            enabled: true
-          become: true
+    - name: Restart engram service
+      ansible.builtin.systemd:
+        name: engram
+        state: restarted
+        enabled: true
+      become: true
+      listen: Reload and restart services
