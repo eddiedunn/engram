@@ -132,7 +132,7 @@
 
     - name: Restart engram service
       ansible.builtin.systemd:
-        name: engram
+        name: engram-app
         state: restarted
         enabled: true
       become: true
