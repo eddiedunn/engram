@@ -11,7 +11,7 @@
 - name: Deploy engram
   hosts: all
   gather_facts: false
-  # No global become - podman build runs as the connected user (eddie)
+  # No global become - tasks that need root use per-task become: true
 
   vars:
     service_name: engram
@@ -71,7 +71,7 @@
         mode: "0640"
       become: true
 
-    - name: Build container image from source (as eddie)
+    - name: Build container image from source
       ansible.builtin.command:
         cmd: >
           podman build
@@ -80,6 +80,7 @@
           .
         chdir: "{{ engram_src_dir }}"
       changed_when: true
+      become: true
 
     - name: Copy engram.network quadlet file
       ansible.builtin.copy:
