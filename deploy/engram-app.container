@@ -1,0 +1,28 @@
+[Unit]
+Description=Engram Service
+After=engram-network.service engram-db.service
+Requires=engram-network.service engram-db.service
+
+[Container]
+Image=localhost/engram:latest
+ContainerName=engram
+Network=engram-network
+IP=10.90.0.11
+PublishPort=127.0.0.1:8800:8800
+
+EnvironmentFile=/opt/engram/engram-app.env
+
+Volume=/opt/engram/data:/app/data:Z
+
+HealthCmd=curl -sf http://localhost:8800/health || exit 1
+HealthInterval=30s
+HealthTimeout=10s
+HealthRetries=5
+HealthStartPeriod=60s
+
+[Service]
+Restart=always
+TimeoutStartSec=300
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,11 @@
+[Unit]
+Description=Engram Container Network
+
+[Network]
+NetworkName=engram-network
+Driver=bridge
+Subnet=10.90.0.0/24
+Gateway=10.90.0.1
+
+[Install]
+WantedBy=default.target

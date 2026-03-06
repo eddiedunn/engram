@@ -1,0 +1,137 @@
+---
+# Deploy engram to tela
+#
+# Usage (run on tela with local connection):
+#   ansible-playbook -i "127.0.0.1," deploy/ansible-deploy.yml \
+#     --connection local -e "engram_src_dir=<path>"
+#
+# Variables:
+#   engram_src_dir: path to checked-out repo on tela (set by Jenkins as WORKSPACE)
+
+- name: Deploy engram
+  hosts: all
+  gather_facts: false
+  # No global become - podman build runs as the connected user (eddie)
+
+  vars:
+    service_name: engram
+    quadlet_dir: /etc/containers/systemd
+    opt_dir: /opt/engram
+    data_dir: /opt/engram/data
+    engram_src_dir: "{{ ansible_env.HOME }}/engram"
+
+  tasks:
+    - name: Ensure opt and data directories exist
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      loop:
+        - "{{ opt_dir }}"
+        - "{{ data_dir }}"
+      become: true
+
+    - name: Generate DB password if not in gopass
+      ansible.builtin.command:
+        cmd: gopass generate -f engram/tela/db-password 32
+      register: gopass_gen
+      changed_when: gopass_gen.rc == 0
+      failed_when: false
+
+    - name: Read DB password from gopass
+      ansible.builtin.command:
+        cmd: gopass show engram/tela/db-password
+      register: db_password_result
+      changed_when: false
+
+    - name: Write engram-db.env
+      ansible.builtin.copy:
+        content: |
+          POSTGRES_USER=engram
+          POSTGRES_PASSWORD={{ db_password_result.stdout | trim }}
+          POSTGRES_DB=engram
+        dest: "{{ opt_dir }}/engram-db.env"
+        owner: root
+        group: root
+        mode: "0640"
+      become: true
+
+    - name: Write engram-app.env
+      ansible.builtin.copy:
+        content: |
+          ENGRAM_DATABASE_URL=postgresql+asyncpg://engram:{{ db_password_result.stdout | trim }}@10.90.0.10:5432/engram
+          ENGRAM_API_HOST=0.0.0.0
+          ENGRAM_API_PORT=8800
+          ENGRAM_LOG_FORMAT=json
+        dest: "{{ opt_dir }}/engram-app.env"
+        owner: root
+        group: root
+        mode: "0640"
+      become: true
+
+    - name: Build container image from source (as eddie)
+      ansible.builtin.command:
+        cmd: >
+          podman build
+          -t localhost/engram:latest
+          -f deploy/Dockerfile
+          .
+        chdir: "{{ engram_src_dir }}"
+      changed_when: true
+
+    - name: Copy engram.network quadlet file
+      ansible.builtin.copy:
+        src: "{{ engram_src_dir }}/deploy/engram.network"
+        dest: "{{ quadlet_dir }}/engram.network"
+        remote_src: true
+        owner: root
+        group: root
+        mode: "0644"
+      become: true
+      notify: Reload and restart services
+
+    - name: Copy engram-db.container quadlet file
+      ansible.builtin.copy:
+        src: "{{ engram_src_dir }}/deploy/engram-db.container"
+        dest: "{{ quadlet_dir }}/engram-db.container"
+        remote_src: true
+        owner: root
+        group: root
+        mode: "0644"
+      become: true
+      notify: Reload and restart services
+
+    - name: Copy engram-app.container quadlet file
+      ansible.builtin.copy:
+        src: "{{ engram_src_dir }}/deploy/engram-app.container"
+        dest: "{{ quadlet_dir }}/engram-app.container"
+        remote_src: true
+        owner: root
+        group: root
+        mode: "0644"
+      become: true
+      notify: Reload and restart services
+
+  handlers:
+    - name: Reload and restart services
+      block:
+        - name: Reload systemd daemon
+          ansible.builtin.systemd:
+            daemon_reload: true
+          become: true
+
+        - name: Restart engram-db service
+          ansible.builtin.systemd:
+            name: engram-db
+            state: restarted
+            enabled: true
+          become: true
+
+        - name: Restart engram service
+          ansible.builtin.systemd:
+            name: engram
+            state: restarted
+            enabled: true
+          become: true

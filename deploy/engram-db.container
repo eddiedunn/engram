@@ -1,0 +1,30 @@
+[Unit]
+Description=Engram PostgreSQL (pgvector) Database
+After=engram-network.service
+Requires=engram-network.service
+
+[Container]
+Image=docker.io/pgvector/pgvector:pg16
+ContainerName=engram-db
+Network=engram-network
+IP=10.90.0.10
+
+EnvironmentFile=/opt/engram/engram-db.env
+
+Environment=POSTGRES_INITDB_ARGS=--encoding=UTF8
+Environment=PGDATA=/var/lib/postgresql/data/pgdata
+
+Volume=engram-db-data:/var/lib/postgresql/data:Z
+
+HealthCmd=pg_isready -U engram -d engram
+HealthInterval=10s
+HealthTimeout=5s
+HealthRetries=5
+HealthStartPeriod=30s
+
+[Service]
+Restart=always
+TimeoutStartSec=120
+
+[Install]
+WantedBy=default.target
