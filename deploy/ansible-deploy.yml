@@ -37,6 +37,25 @@
         mode: "0644"
       notify: Reload and restart engram
 
+    - name: Ensure backup script directory exists
+      ansible.builtin.file:
+        path: /opt/engram/scripts
+        state: directory
+        owner: eddie
+        group: eddie
+        mode: "0755"
+      become: true
+
+    - name: Deploy backup script
+      ansible.builtin.copy:
+        src: "{{ engram_src_dir }}/deploy/scripts/backup-db.sh"
+        dest: /opt/engram/scripts/backup-db.sh
+        remote_src: true
+        owner: eddie
+        group: eddie
+        mode: "0755"
+      become: true
+
   handlers:
     - name: Reload user systemd daemon
       ansible.builtin.command:
