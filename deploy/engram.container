@@ -1,0 +1,26 @@
+[Unit]
+Description=Engram Content Storage and Vector Search
+After=network-online.target
+
+[Container]
+Image=localhost/engram:latest
+ContainerName=engram
+Network=engram-net
+Network=gpu-services
+PublishPort=127.0.0.1:8800:8800
+Environment=ENGRAM_DATABASE_URL=postgresql+asyncpg://engram:engram@postgres:5432/engram
+Environment=ENGRAM_API_HOST=0.0.0.0
+Environment=ENGRAM_API_PORT=8800
+Environment=ENGRAM_LOG_FORMAT=json
+Environment=ENGRAM_EMBED_SERVICE_URL=http://embed:8710
+HealthCmd=python3 /app/healthcheck.py
+HealthInterval=30s
+HealthTimeout=10s
+HealthRetries=3
+
+[Service]
+Restart=always
+TimeoutStartSec=120
+
+[Install]
+WantedBy=default.target

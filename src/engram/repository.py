@@ -316,6 +316,11 @@ class ContentRepository:
         # Note: pgvector uses distance, so we convert to similarity (1 - distance)
         from sqlalchemy import bindparam
 
+        # IVFFlat index uses probes to control recall vs speed tradeoff.
+        # Default probes=1 with lists=100 returns zero results on small datasets.
+        # Set probes=10 to search 10% of clusters for reliable recall.
+        await self.session.execute(text("SET ivfflat.probes = 10"))
+
         sql = """
             SELECT
                 c.id as content_id,
@@ -378,7 +383,7 @@ class ContentRepository:
                 ),
                 chunk_text=row["chunk_text"],
                 chunk_index=row["chunk_index"],
-                score=float(row["score"]),
+                score=max(0.0, float(row["score"])),
                 search_type="semantic",
             )
             for row in rows

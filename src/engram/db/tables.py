@@ -39,7 +39,8 @@ class ContentTable(Base):
         String(255), unique=True, nullable=False, index=True
     )
     content_type: Mapped[ContentType] = mapped_column(
-        Enum(ContentType, name="content_type_enum"), nullable=False
+        Enum(ContentType, name="content_type_enum", native_enum=False, create_constraint=False),
+        nullable=False,
     )
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     url: Mapped[str | None] = mapped_column(String(2000), nullable=True)

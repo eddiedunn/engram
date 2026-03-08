@@ -11,12 +11,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN pip install uv
 
 # Copy project files
-COPY pyproject.toml .
-COPY README.md .
+COPY pyproject.toml README.md ./
 COPY src/ src/
+COPY deploy/healthcheck.py /app/healthcheck.py
 
 # Install dependencies
-RUN uv pip install --system -e .
+RUN uv pip install --system .
 
 # Create non-root user
 RUN useradd -m -u 1000 engram
