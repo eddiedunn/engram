@@ -27,6 +27,7 @@
           .
         chdir: "{{ engram_src_dir }}"
       changed_when: true
+      notify: Reload and restart engram
 
     - name: Copy engram.container quadlet file
       ansible.builtin.copy:
