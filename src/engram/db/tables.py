@@ -39,7 +39,13 @@ class ContentTable(Base):
         String(255), unique=True, nullable=False, index=True
     )
     content_type: Mapped[ContentType] = mapped_column(
-        Enum(ContentType, name="content_type_enum", native_enum=False, create_constraint=False),
+        Enum(
+            ContentType,
+            name="content_type_enum",
+            native_enum=False,
+            create_constraint=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
         nullable=False,
     )
     title: Mapped[str] = mapped_column(String(500), nullable=False)
