@@ -31,10 +31,13 @@ class Embedder:
         result = self.embed_batch([text])
         return result[0] if result else None
 
+    _BATCH_SIZE = 100
+
     def embed_batch(self, texts: list[str]) -> list[list[float]] | None:
         """Generate embeddings for multiple texts.
 
         Returns None if service unavailable (graceful degradation).
+        Splits into batches of 100 to respect embed service limits.
         """
         if not texts:
             return []
@@ -43,9 +46,13 @@ class Embedder:
             return None
 
         try:
-            response = self._client.post("/v1/embed", json={"texts": texts})
-            response.raise_for_status()
-            return response.json()["embeddings"]
+            all_embeddings: list[list[float]] = []
+            for i in range(0, len(texts), self._BATCH_SIZE):
+                batch = texts[i:i + self._BATCH_SIZE]
+                response = self._client.post("/v1/embed", json={"texts": batch})
+                response.raise_for_status()
+                all_embeddings.extend(response.json()["embeddings"])
+            return all_embeddings
         except Exception as e:
             logger.warning("Embed service unavailable", error=str(e))
             self._available = False
