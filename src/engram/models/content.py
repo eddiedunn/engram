@@ -76,6 +76,15 @@ class Chunk(BaseModel):
     created_at: datetime
 
 
+class ContentListResponse(BaseModel):
+    """Paginated response for content list."""
+
+    items: list["Content"]
+    total: int
+    limit: int
+    offset: int
+
+
 class SearchResult(BaseModel):
     """Search result with relevance score."""
 

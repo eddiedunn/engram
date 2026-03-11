@@ -5,6 +5,7 @@ from engram.models.content import (
     ChunkCreate,
     Content,
     ContentCreate,
+    ContentListResponse,
     ContentType,
     SearchResult,
 )
@@ -12,6 +13,7 @@ from engram.models.content import (
 __all__ = [
     "Content",
     "ContentCreate",
+    "ContentListResponse",
     "ContentType",
     "Chunk",
     "ChunkCreate",

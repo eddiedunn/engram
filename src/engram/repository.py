@@ -8,12 +8,12 @@ from uuid import UUID
 
 import structlog
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import delete, select, text, cast, update
+from sqlalchemy import delete, func, select, text, cast, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from engram.db.tables import ChunkTable, ContentTable
 from engram.embedding import Chunker, ChunkingStrategy, Embedder
-from engram.models import Content, ContentCreate, ContentType, SearchResult
+from engram.models import Content, ContentCreate, ContentListResponse, ContentType, SearchResult
 
 logger = structlog.get_logger()
 
@@ -241,6 +241,41 @@ class ContentRepository:
         query = query.limit(limit).offset(offset)
         result = await self.session.execute(query)
         return [self._to_model(row) for row in result.scalars()]
+
+    async def list_with_count(
+        self,
+        content_type: ContentType | None = None,
+        tags: list[str] | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> ContentListResponse:
+        """List content with total count for pagination."""
+        # Base filter conditions shared by both queries
+        count_query = select(func.count()).select_from(ContentTable)
+        list_query = select(ContentTable).order_by(ContentTable.created_at.desc())
+
+        if content_type:
+            count_query = count_query.where(ContentTable.content_type == content_type)
+            list_query = list_query.where(ContentTable.content_type == content_type)
+
+        if tags:
+            count_query = count_query.where(ContentTable.tags.overlap(tags))
+            list_query = list_query.where(ContentTable.tags.overlap(tags))
+
+        list_query = list_query.limit(limit).offset(offset)
+
+        total_result = await self.session.execute(count_query)
+        total = total_result.scalar_one()
+
+        items_result = await self.session.execute(list_query)
+        items = [self._to_model(row) for row in items_result.scalars()]
+
+        return ContentListResponse(
+            items=items,
+            total=total,
+            limit=limit,
+            offset=offset,
+        )
 
     async def get_chunks_by_status(
         self, status: str, limit: int = 50

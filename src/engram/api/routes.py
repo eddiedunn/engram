@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from engram.db.connection import get_db
-from engram.models import Content, ContentCreate, ContentType, SearchResult
+from engram.models import Content, ContentCreate, ContentListResponse, ContentType, SearchResult
 from engram.repository import ContentRepository
 
 logger = structlog.get_logger()
@@ -95,16 +95,16 @@ async def delete_content(content_id: str, repo: RepoDep) -> dict:
     return {"message": "Content deleted", "content_id": content_id}
 
 
-@router.get("/content", response_model=list[Content])
+@router.get("/content", response_model=ContentListResponse)
 async def list_content(
     repo: RepoDep,
     content_type: ContentType | None = None,
     tags: Annotated[list[str] | None, Query()] = None,
-    limit: int = Query(50, ge=1, le=200),
+    limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
-) -> list[Content]:
-    """List content with optional filters."""
-    return await repo.list(
+) -> ContentListResponse:
+    """List content with optional filters. Returns paginated envelope with total count."""
+    return await repo.list_with_count(
         content_type=content_type,
         tags=tags,
         limit=limit,
