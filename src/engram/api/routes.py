@@ -75,6 +75,15 @@ async def store_content(content: ContentCreate, repo: RepoDep) -> StoreResponse:
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/content/sources")
+async def get_sources(
+    repo: RepoDep,
+    content_type: ContentType | None = None,
+) -> dict[str, list[str]]:
+    """Get unique content sources (authors) grouped by content type."""
+    return await repo.get_sources(content_type=content_type)
+
+
 @router.get("/content/{content_id}", response_model=Content)
 async def get_content(content_id: str, repo: RepoDep) -> Content:
     """Get content by external content ID."""
@@ -100,6 +109,7 @@ async def list_content(
     repo: RepoDep,
     content_type: ContentType | None = None,
     tags: Annotated[list[str] | None, Query()] = None,
+    source: str | None = None,
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
 ) -> ContentListResponse:
@@ -107,6 +117,7 @@ async def list_content(
     return await repo.list_with_count(
         content_type=content_type,
         tags=tags,
+        source=source,
         limit=limit,
         offset=offset,
     )

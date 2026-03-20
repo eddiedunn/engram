@@ -8,7 +8,7 @@ from uuid import UUID
 
 import structlog
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import delete, func, select, text, cast, update
+from sqlalchemy import delete, distinct, func, select, text, cast, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from engram.db.tables import ChunkTable, ContentTable
@@ -242,10 +242,48 @@ class ContentRepository:
         result = await self.session.execute(query)
         return [self._to_model(row) for row in result.scalars()]
 
+    async def get_sources(
+        self,
+        content_type: ContentType | None = None,
+    ) -> dict[str, list[str]]:
+        """Get unique content sources (authors) grouped by content type.
+
+        Args:
+            content_type: Optional filter by content type
+
+        Returns:
+            Dict mapping content_type to list of author names
+        """
+        query = (
+            select(
+                ContentTable.content_type,
+                ContentTable.metadata_["author"].astext.label("author"),
+            )
+            .where(ContentTable.metadata_["author"].astext.isnot(None))
+            .distinct()
+            .order_by(ContentTable.content_type, "author")
+        )
+
+        if content_type:
+            query = query.where(ContentTable.content_type == content_type)
+
+        result = await self.session.execute(query)
+        rows = result.all()
+
+        sources: dict[str, list[str]] = {}
+        for row in rows:
+            ct = row.content_type if isinstance(row.content_type, str) else row.content_type.value
+            if ct not in sources:
+                sources[ct] = []
+            sources[ct].append(row.author)
+
+        return sources
+
     async def list_with_count(
         self,
         content_type: ContentType | None = None,
         tags: list[str] | None = None,
+        source: str | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> ContentListResponse:
@@ -261,6 +299,11 @@ class ContentRepository:
         if tags:
             count_query = count_query.where(ContentTable.tags.overlap(tags))
             list_query = list_query.where(ContentTable.tags.overlap(tags))
+
+        if source:
+            source_filter = ContentTable.metadata_["author"].astext == source
+            count_query = count_query.where(source_filter)
+            list_query = list_query.where(source_filter)
 
         list_query = list_query.limit(limit).offset(offset)
 
