@@ -75,13 +75,18 @@ async def store_content(content: ContentCreate, repo: RepoDep) -> StoreResponse:
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# This route MUST be before /content/{content_id} to avoid the path parameter swallowing "sources".
 @router.get("/content/sources")
 async def get_sources(
     repo: RepoDep,
     content_type: ContentType | None = None,
 ) -> dict[str, list[str]]:
     """Get unique content sources (authors) grouped by content type."""
-    return await repo.get_sources(content_type=content_type)
+    try:
+        return await repo.get_sources(content_type=content_type)
+    except Exception as e:
+        logger.error("Failed to get sources", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/content/{content_id}", response_model=Content)

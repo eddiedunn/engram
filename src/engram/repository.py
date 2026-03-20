@@ -254,14 +254,15 @@ class ContentRepository:
         Returns:
             Dict mapping content_type to list of author names
         """
+        author_label = ContentTable.metadata_["author"].astext.label("author")
         query = (
             select(
                 ContentTable.content_type,
-                ContentTable.metadata_["author"].astext.label("author"),
+                author_label,
             )
             .where(ContentTable.metadata_["author"].astext.isnot(None))
             .distinct()
-            .order_by(ContentTable.content_type, "author")
+            .order_by(ContentTable.content_type, author_label)
         )
 
         if content_type:
@@ -272,7 +273,7 @@ class ContentRepository:
 
         sources: dict[str, list[str]] = {}
         for row in rows:
-            ct = row.content_type if isinstance(row.content_type, str) else row.content_type.value
+            ct = row.content_type
             if ct not in sources:
                 sources[ct] = []
             sources[ct].append(row.author)
