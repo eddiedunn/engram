@@ -14,6 +14,7 @@ class ContentType(StrEnum):
     YOUTUBE = "youtube"
     ARTICLE = "article"
     PODCAST = "podcast"
+    MEETING = "meeting"
     DOCUMENT = "document"
     NOTE = "note"
     OTHER = "other"
