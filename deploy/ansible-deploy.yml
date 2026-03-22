@@ -29,6 +29,32 @@
       changed_when: true
       notify: Reload and restart engram
 
+    - name: Tag image for registry
+      ansible.builtin.command:
+        cmd: >
+          podman tag
+          localhost/engram:latest
+          registry.starbluesolutions.net/engram:{{ build_number | default('latest') }}
+      changed_when: true
+
+    - name: Tag image as latest in registry
+      ansible.builtin.command:
+        cmd: >
+          podman tag
+          localhost/engram:latest
+          registry.starbluesolutions.net/engram:latest
+      changed_when: true
+
+    - name: Push build tag to registry
+      ansible.builtin.command:
+        cmd: podman push registry.starbluesolutions.net/engram:{{ build_number | default('latest') }}
+      changed_when: true
+
+    - name: Push latest tag to registry
+      ansible.builtin.command:
+        cmd: podman push registry.starbluesolutions.net/engram:latest
+      changed_when: true
+
     - name: Copy engram.container quadlet file
       ansible.builtin.copy:
         src: "{{ engram_src_dir }}/deploy/engram.container"

@@ -4,7 +4,8 @@ After=engram-network.service engram-db.service
 Requires=engram-network.service engram-db.service
 
 [Container]
-Image=localhost/engram:latest
+Image=registry.starbluesolutions.net/engram:latest
+PullPolicy=newer
 ContainerName=engram
 Network=engram-network
 IP=10.90.0.11

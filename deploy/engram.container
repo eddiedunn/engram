@@ -3,7 +3,8 @@ Description=Engram Content Storage and Vector Search
 After=network-online.target
 
 [Container]
-Image=localhost/engram:latest
+Image=registry.starbluesolutions.net/engram:latest
+PullPolicy=newer
 ContainerName=engram
 Network=engram-net
 Network=gpu-services
