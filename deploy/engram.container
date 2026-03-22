@@ -4,7 +4,7 @@ After=network-online.target
 
 [Container]
 Image=registry.starbluesolutions.net/engram:latest
-PullPolicy=newer
+Pull=newer
 ContainerName=engram
 Network=engram-net
 Network=gpu-services
