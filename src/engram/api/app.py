@@ -59,7 +59,7 @@ def create_app() -> FastAPI:
     async def health() -> dict:
         """Health check endpoint."""
         embedder = Embedder()
-        embed_healthy = embedder.check_health()
+        embed_healthy = await embedder.check_health()
 
         overall_status = "healthy" if embed_healthy else "degraded"
 

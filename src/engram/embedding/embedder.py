@@ -20,20 +20,20 @@ class Embedder:
 
     def __init__(self) -> None:
         self.settings = get_settings()
-        self._client = httpx.Client(
+        self._client = httpx.AsyncClient(
             base_url=self.settings.embed_service_url,
             timeout=self.settings.embed_timeout,
         )
         self._available = True
 
-    def embed(self, text: str) -> list[float] | None:
+    async def embed(self, text: str) -> list[float] | None:
         """Generate embedding for a single text."""
-        result = self.embed_batch([text])
+        result = await self.embed_batch([text])
         return result[0] if result else None
 
     _BATCH_SIZE = 100
 
-    def embed_batch(self, texts: list[str]) -> list[list[float]] | None:
+    async def embed_batch(self, texts: list[str]) -> list[list[float]] | None:
         """Generate embeddings for multiple texts.
 
         Returns None if service unavailable (graceful degradation).
@@ -49,7 +49,7 @@ class Embedder:
             all_embeddings: list[list[float]] = []
             for i in range(0, len(texts), self._BATCH_SIZE):
                 batch = texts[i:i + self._BATCH_SIZE]
-                response = self._client.post("/v1/embed", json={"texts": batch})
+                response = await self._client.post("/v1/embed", json={"texts": batch})
                 response.raise_for_status()
                 all_embeddings.extend(response.json()["embeddings"])
             return all_embeddings
@@ -58,10 +58,10 @@ class Embedder:
             self._available = False
             return None
 
-    def check_health(self) -> bool:
+    async def check_health(self) -> bool:
         """Check if embed service is healthy."""
         try:
-            response = self._client.get("/health")
+            response = await self._client.get("/health")
             self._available = response.status_code == 200
             return self._available
         except Exception:

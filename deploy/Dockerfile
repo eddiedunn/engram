@@ -11,8 +11,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN pip install uv
 
 # Copy project files
-COPY pyproject.toml README.md ./
+COPY pyproject.toml README.md alembic.ini ./
 COPY src/ src/
+COPY alembic/ alembic/
 COPY deploy/healthcheck.py /app/healthcheck.py
 
 # Install dependencies

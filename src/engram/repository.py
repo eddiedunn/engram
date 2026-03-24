@@ -86,8 +86,7 @@ class ContentRepository:
         # Chunk and embed
         chunks = self.chunker.chunk(content.text)
         chunk_texts = [c.text for c in chunks]
-        # Run embedding in thread pool to avoid blocking async event loop
-        embeddings = await asyncio.to_thread(self.embedder.embed_batch, chunk_texts)
+        embeddings = await self.embedder.embed_batch(chunk_texts)
 
         # Handle embedding service unavailability
         if embeddings is None:
@@ -161,8 +160,7 @@ class ContentRepository:
         # Re-chunk and embed
         chunks = self.chunker.chunk(content.text)
         chunk_texts = [c.text for c in chunks]
-        # Run embedding in thread pool to avoid blocking async event loop
-        embeddings = await asyncio.to_thread(self.embedder.embed_batch, chunk_texts)
+        embeddings = await self.embedder.embed_batch(chunk_texts)
 
         # Handle embedding service unavailability
         if embeddings is None:
@@ -383,8 +381,7 @@ class ContentRepository:
             List of search results ordered by relevance
         """
         # Generate query embedding
-        # Run embedding in thread pool to avoid blocking async event loop
-        query_embedding = await asyncio.to_thread(self.embedder.embed, query)
+        query_embedding = await self.embedder.embed(query)
 
         # If embedding service unavailable, return empty results
         if query_embedding is None:
@@ -394,11 +391,6 @@ class ContentRepository:
         # Build the query with pgvector cosine distance
         # Note: pgvector uses distance, so we convert to similarity (1 - distance)
         from sqlalchemy import bindparam
-
-        # IVFFlat index uses probes to control recall vs speed tradeoff.
-        # Default probes=1 with lists=100 returns zero results on small datasets.
-        # Set probes=10 to search 10% of clusters for reliable recall.
-        await self.session.execute(text("SET ivfflat.probes = 10"))
 
         sql = """
             SELECT
@@ -503,10 +495,10 @@ class ContentRepository:
                 c.updated_at,
                 ch.text as chunk_text,
                 ch.chunk_index,
-                ts_rank(to_tsvector('english', ch.text), plainto_tsquery('english', :query)) as score
+                ts_rank(ch.text_tsv, plainto_tsquery('english', :query)) as score
             FROM chunks ch
             JOIN content c ON ch.content_id = c.id
-            WHERE to_tsvector('english', ch.text) @@ plainto_tsquery('english', :query)
+            WHERE ch.text_tsv @@ plainto_tsquery('english', :query)
         """
 
         params: dict = {"query": query}
@@ -573,11 +565,9 @@ class ContentRepository:
             Combined and re-ranked results
         """
         # Run both searches
-        semantic_results = await self.search_semantic(
-            query, top_k=top_k * 2, content_type=content_type, tags=tags
-        )
-        fts_results = await self.search_fts(
-            query, limit=top_k * 2, content_type=content_type, tags=tags
+        semantic_results, fts_results = await asyncio.gather(
+            self.search_semantic(query, top_k=top_k * 2, content_type=content_type, tags=tags),
+            self.search_fts(query, limit=top_k * 2, content_type=content_type, tags=tags),
         )
 
         # Combine scores by content+chunk

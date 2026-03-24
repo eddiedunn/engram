@@ -108,11 +108,14 @@ class ChunkTable(Base):
 
     __table_args__ = (
         Index("ix_chunks_content_id", "content_id"),
+        # HNSW index for approximate nearest-neighbour search with cosine distance.
+        # Note: text_tsv (stored generated tsvector column) and its GIN index
+        # (ix_chunks_text_tsv) exist in the DB but are managed via raw SQL migrations
+        # and are not reflected here.
         Index(
             "ix_chunks_embedding",
             "embedding",
-            postgresql_using="ivfflat",
-            postgresql_with={"lists": 100},
+            postgresql_using="hnsw",
             postgresql_ops={"embedding": "vector_cosine_ops"},
         ),
     )

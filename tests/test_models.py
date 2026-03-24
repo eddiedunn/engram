@@ -16,6 +16,7 @@ class TestContentType:
         assert ContentType.YOUTUBE == "youtube"
         assert ContentType.ARTICLE == "article"
         assert ContentType.PODCAST == "podcast"
+        assert ContentType.MEETING == "meeting"
         assert ContentType.DOCUMENT == "document"
         assert ContentType.NOTE == "note"
         assert ContentType.OTHER == "other"

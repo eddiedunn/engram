@@ -97,3 +97,22 @@
         XDG_RUNTIME_DIR: /run/user/1001
       changed_when: true
       listen: Reload and restart engram
+
+    - name: Wait for engram to be healthy
+      ansible.builtin.command:
+        cmd: podman exec engram python3 /app/healthcheck.py
+      environment:
+        XDG_RUNTIME_DIR: /run/user/1001
+      register: health_check
+      retries: 10
+      delay: 3
+      until: health_check.rc == 0
+      listen: Reload and restart engram
+
+    - name: Run database migrations
+      ansible.builtin.command:
+        cmd: podman exec engram alembic upgrade head
+      environment:
+        XDG_RUNTIME_DIR: /run/user/1001
+      changed_when: true
+      listen: Reload and restart engram
