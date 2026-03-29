@@ -4,7 +4,7 @@ After=engram-network.service
 Requires=engram-network.service
 
 [Container]
-Image=docker.io/pgvector/pgvector:pg16
+Image=registry.starbluesolutions.net/pgvector/pgvector:pg16
 ContainerName=engram-db
 Network=engram-network
 IP=10.90.0.10
