@@ -25,6 +25,15 @@ depends_on = None
 
 
 LOWERCASE_VALUES = ('youtube', 'article', 'podcast', 'document', 'note', 'other')
+LOWERCASE_VALUES_WITH_MEETING = (
+    'youtube',
+    'article',
+    'podcast',
+    'meeting',
+    'document',
+    'note',
+    'other',
+)
 UPPERCASE_VALUES = ('YOUTUBE', 'ARTICLE', 'PODCAST', 'DOCUMENT', 'NOTE', 'OTHER')
 
 
@@ -43,7 +52,10 @@ def upgrade():
 
     existing_values = [row[0] for row in result]
 
-    if existing_values == list(LOWERCASE_VALUES):
+    if existing_values in (
+        list(LOWERCASE_VALUES),
+        list(LOWERCASE_VALUES_WITH_MEETING),
+    ):
         # DB is already in the correct state — migration is a no-op
         return
 
@@ -56,13 +68,29 @@ def upgrade():
     # Step 2: Drop the old enum type (uppercase values)
     op.execute("DROP TYPE IF EXISTS content_type_enum")
 
-    # Step 3: Normalize existing data to lowercase
-    op.execute("UPDATE content SET content_type = LOWER(content_type)")
+    # Step 3: Normalize existing data to canonical lowercase values.
+    # Older pre-Alembic databases may contain ad-hoc values; map those to
+    # 'other' so the enum cast stays forward-compatible.
+    op.execute(
+        """
+        UPDATE content
+        SET content_type = CASE LOWER(content_type)
+            WHEN 'youtube' THEN 'youtube'
+            WHEN 'article' THEN 'article'
+            WHEN 'podcast' THEN 'podcast'
+            WHEN 'meeting' THEN 'meeting'
+            WHEN 'document' THEN 'document'
+            WHEN 'note' THEN 'note'
+            WHEN 'other' THEN 'other'
+            ELSE 'other'
+        END
+        """
+    )
 
     # Step 4: Create new enum type with lowercase values
     op.execute(
         "CREATE TYPE content_type_enum AS ENUM "
-        "('youtube', 'article', 'podcast', 'document', 'note', 'other')"
+        "('youtube', 'article', 'podcast', 'meeting', 'document', 'note', 'other')"
     )
 
     # Step 5: Convert column back to the new enum type
