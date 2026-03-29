@@ -6,6 +6,10 @@ pipeline {
         disableConcurrentBuilds()
     }
 
+    triggers {
+        cron('H H(2-4) * * 0')
+    }
+
     stages {
         stage('Build Search Indexes') {
             steps {
