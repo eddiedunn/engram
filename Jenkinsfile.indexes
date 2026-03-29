@@ -1,0 +1,31 @@
+pipeline {
+    agent { label 'linux && gpu && compute' }
+
+    options {
+        timeout(time: 180, unit: 'MINUTES')
+        disableConcurrentBuilds()
+    }
+
+    stages {
+        stage('Build Search Indexes') {
+            steps {
+                sh '''ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook \
+                    -i "127.0.0.1," \
+                    deploy/ansible-build-indexes.yml \
+                    --connection local'''
+            }
+        }
+    }
+
+    post {
+        always {
+            deleteDir()
+        }
+        success {
+            echo 'Index maintenance completed successfully.'
+        }
+        failure {
+            echo 'Index maintenance failed.'
+        }
+    }
+}

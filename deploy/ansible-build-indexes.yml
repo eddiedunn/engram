@@ -1,0 +1,25 @@
+---
+# Build heavyweight Engram search indexes on tela without blocking deploy.
+#
+# Usage (run on tela as eddie with local connection):
+#   ansible-playbook -i "127.0.0.1," deploy/ansible-build-indexes.yml \
+#     --connection local
+
+- name: Build Engram indexes
+  hosts: all
+  gather_facts: false
+
+  tasks:
+    - name: Ensure chunks embedding HNSW index exists
+      ansible.builtin.shell: |
+        set -euo pipefail
+        podman exec postgres psql -v ON_ERROR_STOP=1 -U engram -d engram <<'SQL'
+        CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_chunks_embedding
+        ON chunks USING hnsw (embedding vector_cosine_ops);
+        ANALYZE chunks;
+        SQL
+      environment:
+        XDG_RUNTIME_DIR: /run/user/1001
+      args:
+        executable: /bin/bash
+      changed_when: true

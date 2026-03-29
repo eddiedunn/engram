@@ -33,32 +33,18 @@ def upgrade():
         text("CREATE INDEX ix_chunks_text_tsv ON chunks USING GIN (text_tsv)")
     )
 
-    # 3. Drop the existing IVFFlat embedding index.
+    # 3. Leave the embedding ANN index to the dedicated maintenance job.
+    # The application can operate without it, and building HNSW inline can
+    # make deploys look hung on larger datasets.
     op.execute(text("DROP INDEX IF EXISTS ix_chunks_embedding"))
-
-    # 4. Create HNSW index for approximate nearest-neighbour search with cosine distance.
-    op.execute(
-        text(
-            "CREATE INDEX ix_chunks_embedding ON chunks "
-            "USING hnsw (embedding vector_cosine_ops)"
-        )
-    )
 
 
 def downgrade():
-    # 1. Drop the HNSW embedding index.
+    # 1. Drop the embedding index if present.
     op.execute(text("DROP INDEX IF EXISTS ix_chunks_embedding"))
 
-    # 2. Recreate the original IVFFlat embedding index.
-    op.execute(
-        text(
-            "CREATE INDEX ix_chunks_embedding ON chunks "
-            "USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100)"
-        )
-    )
-
-    # 3. Drop the GIN full-text search index.
+    # 2. Drop the GIN full-text search index.
     op.execute(text("DROP INDEX IF EXISTS ix_chunks_text_tsv"))
 
-    # 4. Drop the stored generated tsvector column.
+    # 3. Drop the stored generated tsvector column.
     op.execute(text("ALTER TABLE chunks DROP COLUMN IF EXISTS text_tsv"))
