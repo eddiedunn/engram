@@ -1,6 +1,6 @@
 """API routes for content management and search."""
 
-from typing import Annotated, AsyncGenerator
+from typing import Annotated, Any, AsyncGenerator
 from uuid import UUID
 
 import structlog
@@ -49,6 +49,12 @@ class HybridSearchRequest(SearchRequest):
     """Hybrid search with weight parameter."""
 
     semantic_weight: float = Field(0.7, ge=0.0, le=1.0)
+
+
+class MetadataPatchRequest(BaseModel):
+    """PATCH request to merge keys into content.metadata."""
+
+    metadata: dict[str, Any] = Field(..., description="Keys to merge into content.metadata (JSONB ||)")
 
 
 class StatsResponse(BaseModel):
@@ -107,6 +113,19 @@ async def delete_content(content_id: str, repo: RepoDep) -> dict:
 
     await repo.delete(content.id)
     return {"message": "Content deleted", "content_id": content_id}
+
+
+@router.patch("/content/{content_id}", response_model=Content)
+async def patch_content_metadata(
+    content_id: str,
+    request: MetadataPatchRequest,
+    repo: RepoDep,
+) -> Content:
+    """Merge keys into content.metadata (JSONB ||). No re-chunk, no re-embed."""
+    updated = await repo.merge_metadata(content_id, request.metadata)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Content not found")
+    return updated
 
 
 @router.get("/content", response_model=ContentListResponse)

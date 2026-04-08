@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from datetime import datetime
 from uuid import UUID
 
@@ -601,6 +602,25 @@ class ContentRepository:
             )
             for score, result in sorted_results[:top_k]
         ]
+
+    async def merge_metadata(self, content_id: str, patch: dict) -> Content | None:
+        """Merge patch into content.metadata using JSONB `||`. Returns updated row or None.
+
+        Never re-chunks, never re-embeds, never touches the chunks table.
+        """
+        stmt = text("""
+            UPDATE content
+            SET metadata = COALESCE(metadata, '{}'::jsonb) || CAST(:patch AS jsonb),
+                updated_at = now()
+            WHERE content_id = :cid
+            RETURNING id
+        """)
+        result = await self.session.execute(stmt, {"cid": content_id, "patch": json.dumps(patch)})
+        row = result.first()
+        if not row:
+            return None
+        await self.session.commit()
+        return await self.get_by_content_id(content_id)
 
     def _to_model(self, row: ContentTable) -> Content:
         """Convert database row to domain model."""
