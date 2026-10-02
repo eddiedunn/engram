@@ -4,9 +4,10 @@ from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
 import structlog
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from engram.api.auth import require_api_key
 from engram.api.routes import router
 from engram.config import get_settings
 from engram.db.connection import close_db, init_db
@@ -19,7 +20,12 @@ logger = structlog.get_logger()
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan manager."""
     settings = get_settings()
-    logger.info("Starting Engram", version="0.1.0", port=settings.api_port)
+    logger.info(
+        "Starting Engram",
+        version="0.1.0",
+        port=settings.api_port,
+        api_keys_required=len(settings.api_keys),
+    )
 
     # Initialize database
     await init_db()
@@ -53,7 +59,7 @@ def create_app() -> FastAPI:
     )
 
     # Include routes
-    app.include_router(router, prefix="/api/v1")
+    app.include_router(router, prefix="/api/v1", dependencies=[Depends(require_api_key)])
 
     @app.get("/health")
     async def health() -> dict:

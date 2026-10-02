@@ -1,9 +1,12 @@
 """Configuration management for Engram."""
 
 from functools import lru_cache
+from typing import Annotated, Any
 
 from pydantic import PostgresDsn, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+
+API_KEY_MIN_LENGTH = 32
 
 
 class Settings(BaseSettings):
@@ -34,10 +37,28 @@ class Settings(BaseSettings):
     api_host: str = "0.0.0.0"
     api_port: int = 8800
     api_reload: bool = False
+    # Empty (the default) leaves /api/v1 open. When set, every /api/v1 request needs
+    # "Authorization: Bearer <one of these keys>". Comma-separated, one key per client, so a
+    # client can be cut off by removing its key. /health stays open for container health checks.
+    api_keys: Annotated[list[str], NoDecode] = []
 
     # Logging
     log_level: str = "INFO"
     log_format: str = "json"  # "json" or "console"
+
+    @field_validator("api_keys", mode="before")
+    @classmethod
+    def split_api_keys(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            return [key.strip() for key in v.split(",") if key.strip()]
+        return v
+
+    @field_validator("api_keys")
+    @classmethod
+    def api_keys_long_enough(cls, v: list[str]) -> list[str]:
+        if any(len(key) < API_KEY_MIN_LENGTH for key in v):
+            raise ValueError(f"each API key must be at least {API_KEY_MIN_LENGTH} characters")
+        return v
 
     @field_validator("database_url", mode="before")
     @classmethod
